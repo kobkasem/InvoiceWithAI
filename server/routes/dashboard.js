@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../config/database");
+const supabase = require("../config/database");
 const { authenticate } = require("../middleware/auth");
 
 // Get dashboard statistics
@@ -9,89 +9,89 @@ router.get("/stats", authenticate, async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
+    // Build base query with optional user filter
+    const isAdminOrSupervisor = ["admin", "supervisor"].includes(userRole);
+    let baseQuery = supabase.from("invoices").select("*", { count: "exact" });
+    if (!isAdminOrSupervisor) {
+      baseQuery = baseQuery.eq("user_id", userId);
+    }
+
     // Total invoices
-    let totalInvoicesQuery = "SELECT COUNT(*) as total FROM invoices";
-    let totalInvoicesParams = [];
+    const { count: totalInvoices, error: totalError } = await baseQuery.select("*", { count: "exact", head: true });
 
     // Pending invoices
-    let pendingInvoicesQuery =
-      "SELECT COUNT(*) as total FROM invoices WHERE status = 'pending'";
-    let pendingInvoicesParams = [];
+    let pendingQuery = supabase.from("invoices").select("*", { count: "exact", head: true }).eq("status", "pending");
+    if (!isAdminOrSupervisor) {
+      pendingQuery = pendingQuery.eq("user_id", userId);
+    }
+    const { count: pendingInvoices, error: pendingError } = await pendingQuery;
 
     // Approved invoices
-    let approvedInvoicesQuery =
-      "SELECT COUNT(*) as total FROM invoices WHERE status = 'approved'";
-    let approvedInvoicesParams = [];
+    let approvedQuery = supabase.from("invoices").select("*", { count: "exact", head: true }).eq("status", "approved");
+    if (!isAdminOrSupervisor) {
+      approvedQuery = approvedQuery.eq("user_id", userId);
+    }
+    const { count: approvedInvoices, error: approvedError } = await approvedQuery;
 
     // Rejected invoices
-    let rejectedInvoicesQuery =
-      "SELECT COUNT(*) as total FROM invoices WHERE status = 'rejected'";
-    let rejectedInvoicesParams = [];
-
-    // If user is not admin/supervisor, filter by user_id
-    if (!["admin", "supervisor"].includes(userRole)) {
-      totalInvoicesQuery += " WHERE user_id = ?";
-      totalInvoicesParams.push(userId);
-      pendingInvoicesQuery += " AND user_id = ?";
-      pendingInvoicesParams.push(userId);
-      approvedInvoicesQuery += " AND user_id = ?";
-      approvedInvoicesParams.push(userId);
-      rejectedInvoicesQuery += " AND user_id = ?";
-      rejectedInvoicesParams.push(userId);
+    let rejectedQuery = supabase.from("invoices").select("*", { count: "exact", head: true }).eq("status", "rejected");
+    if (!isAdminOrSupervisor) {
+      rejectedQuery = rejectedQuery.eq("user_id", userId);
     }
-
-    const [totalResult] = await pool.query(
-      totalInvoicesQuery,
-      totalInvoicesParams
-    );
-    const [pendingResult] = await pool.query(
-      pendingInvoicesQuery,
-      pendingInvoicesParams
-    );
-    const [approvedResult] = await pool.query(
-      approvedInvoicesQuery,
-      approvedInvoicesParams
-    );
-    const [rejectedResult] = await pool.query(
-      rejectedInvoicesQuery,
-      rejectedInvoicesParams
-    );
+    const { count: rejectedInvoices, error: rejectedError } = await rejectedQuery;
 
     // Recent invoices
-    let recentInvoicesQuery = `
-      SELECT i.*, u.email as user_email, u.full_name as user_name
-      FROM invoices i
-      LEFT JOIN users u ON i.user_id = u.id
-    `;
-    let recentInvoicesParams = [];
+    let recentQuery = supabase
+      .from("invoices")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
 
-    if (!["admin", "supervisor"].includes(userRole)) {
-      recentInvoicesQuery += " WHERE i.user_id = ?";
-      recentInvoicesParams.push(userId);
+    if (!isAdminOrSupervisor) {
+      recentQuery = recentQuery.eq("user_id", userId);
     }
 
-    recentInvoicesQuery += " ORDER BY i.created_at DESC LIMIT 10";
-
-    const [recentInvoices] = await pool.query(
-      recentInvoicesQuery,
-      recentInvoicesParams
-    );
+    const { data: recentInvoices, error: recentError } = await recentQuery;
+    
+    // Get user info for recent invoices
+    const recentUserIds = [...new Set((recentInvoices || []).map(inv => inv.user_id).filter(Boolean))];
+    let recentUsersMap = {};
+    if (recentUserIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, email, full_name")
+        .in("id", recentUserIds);
+      
+      if (!usersError && users) {
+        users.forEach(u => {
+          recentUsersMap[u.id] = u;
+        });
+      }
+    }
 
     // Status distribution
-    let statusQuery = `
-      SELECT status, COUNT(*) as count
-      FROM invoices
-    `;
-    let statusParams = [];
-
-    if (!["admin", "supervisor"].includes(userRole)) {
-      statusQuery += " WHERE user_id = ?";
-      statusParams.push(userId);
+    let statusQuery = supabase
+      .from("invoices")
+      .select("status");
+    
+    if (!isAdminOrSupervisor) {
+      statusQuery = statusQuery.eq("user_id", userId);
     }
 
-    statusQuery += " GROUP BY status";
+    const { data: allInvoices, error: statusError } = await statusQuery;
 
-    const [statusDistribution] = await pool.query(statusQuery, statusParams);
+    // Calculate status distribution
+    const statusDistribution = {};
+    if (allInvoices) {
+      allInvoices.forEach((inv) => {
+        statusDistribution[inv.status] = (statusDistribution[inv.status] || 0) + 1;
+      });
+    }
+
+    const statusDistributionArray = Object.entries(statusDistribution).map(([status, count]) => ({
+      status,
+      count,
+    }));
 
     // Monthly statistics (last 6 months)
     const monthlyStats = [];
@@ -105,38 +105,41 @@ router.get("/stats", authenticate, async (req, res) => {
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
-      let monthQuery = `
-        SELECT COUNT(*) as count
-        FROM invoices
-        WHERE created_at >= ? AND created_at <= ?
-      `;
-      let monthParams = [monthStart, monthEnd];
+      let monthQuery = supabase
+        .from("invoices")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", monthStart.toISOString())
+        .lte("created_at", monthEnd.toISOString());
 
-      if (!["admin", "supervisor"].includes(userRole)) {
-        monthQuery += " AND user_id = ?";
-        monthParams.push(userId);
+      if (!isAdminOrSupervisor) {
+        monthQuery = monthQuery.eq("user_id", userId);
       }
 
-      const [monthResult] = await pool.query(monthQuery, monthParams);
+      const { count: monthCount, error: monthError } = await monthQuery;
       monthlyStats.push({
         month,
-        count: monthResult[0].count,
+        count: monthCount || 0,
       });
     }
 
+    // Format recent invoices
+    const formattedRecentInvoices = (recentInvoices || []).map((inv) => ({
+      ...inv,
+      user_email: recentUsersMap[inv.user_id]?.email,
+      user_name: recentUsersMap[inv.user_id]?.full_name,
+      extracted_data:
+        typeof inv.extracted_data === "string"
+          ? JSON.parse(inv.extracted_data)
+          : inv.extracted_data,
+    }));
+
     res.json({
-      total_invoices: totalResult[0].total,
-      pending_invoices: pendingResult[0].total,
-      approved_invoices: approvedResult[0].total,
-      rejected_invoices: rejectedResult[0].total,
-      recent_invoices: recentInvoices.map((inv) => ({
-        ...inv,
-        extracted_data:
-          typeof inv.extracted_data === "string"
-            ? JSON.parse(inv.extracted_data)
-            : inv.extracted_data,
-      })),
-      status_distribution: statusDistribution,
+      total_invoices: totalInvoices || 0,
+      pending_invoices: pendingInvoices || 0,
+      approved_invoices: approvedInvoices || 0,
+      rejected_invoices: rejectedInvoices || 0,
+      recent_invoices: formattedRecentInvoices,
+      status_distribution: statusDistributionArray,
       monthly_stats: monthlyStats,
     });
   } catch (error) {
@@ -146,7 +149,3 @@ router.get("/stats", authenticate, async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-

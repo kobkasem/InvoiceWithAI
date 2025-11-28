@@ -19,7 +19,7 @@ A web application for extracting invoice data from images and PDFs using AI Visi
 ### Backend
 
 - Node.js with Express
-- MySQL database with UTF-8MB4 support for Thai fonts
+- Supabase (PostgreSQL) database with UTF-8 support for Thai fonts
 - OpenAI API integration
 - JWT authentication
 - Multer for file uploads
@@ -41,8 +41,8 @@ A web application for extracting invoice data from images and PDFs using AI Visi
 
 2. **Configure environment:**
 
-   - The `.env` file is already configured with your database and API settings
-   - Make sure MySQL is running on localhost:3306
+   - Copy `env.example` to `.env` and update with your Supabase credentials
+   - See `SUPABASE_MIGRATION.md` for setup instructions
 
 3. **Start the application:**
    ```bash
@@ -52,17 +52,18 @@ A web application for extracting invoice data from images and PDFs using AI Visi
 
 ## Database Setup
 
-The application will automatically:
+1. **Create Supabase Project**: Go to [Supabase](https://supabase.com) and create a new project
+2. **Run Schema**: Execute `supabase_schema.sql` in Supabase SQL Editor
+3. **Configure Environment**: Update `.env` with your Supabase URL and API key
+4. **Start Application**: The app will automatically create default admin user:
+   - Email: `kasem_u@synnex.co.th`
+   - Password: `admin123`
 
-- Create the database `SynnexInvoiceExtractor_cursor` if it doesn't exist
-- Create all necessary tables with UTF-8MB4 encoding for Thai font support
-- Create a default admin user:
-  - Email: `admin@synnex.com`
-  - Password: `admin123`
+See `SUPABASE_MIGRATION.md` for detailed migration guide.
 
 ## Default Admin Account
 
-- **Email**: admin@synnex.com
+- **Email**: kasem_u@synnex.co.th
 - **Password**: admin123
 
 **Important**: Change the admin password after first login!
@@ -148,10 +149,10 @@ The application will automatically:
 ## Notes
 
 - The OpenAI API key is configured in `.env`
-- Make sure MySQL is running before starting the application
-- The database will be created automatically on first run
+- Supabase database is used (PostgreSQL)
+- Database schema must be created via `supabase_schema.sql` in Supabase SQL Editor
 - All file uploads are stored in `server/uploads/`
-- Invoice images are stored in the database as BLOB
+- Invoice images are stored in the database as BYTEA (binary data)
 
 ## Security Considerations
 

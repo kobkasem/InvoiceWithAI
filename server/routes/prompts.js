@@ -1,21 +1,33 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../config/database");
+const supabase = require("../config/database");
 const { authenticate, authorize } = require("../middleware/auth");
 
 // Get active prompt
 router.get("/active", authenticate, async (req, res) => {
   try {
-    const [prompts] = await pool.query(
-      "SELECT * FROM prompts WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1"
-    );
+    const { data: prompts, error } = await supabase
+      .from("prompts")
+      .select("*")
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1);
 
-    if (prompts.length === 0) {
+    if (error) {
+      console.error("Get prompt error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    if (!prompts || prompts.length === 0) {
       return res.status(404).json({ error: "No active prompt found" });
     }
 
     const prompt = prompts[0];
-    prompt.prompt_text = JSON.parse(prompt.prompt_text);
+    try {
+      prompt.prompt_text = JSON.parse(prompt.prompt_text);
+    } catch (e) {
+      // If not JSON, keep as is
+    }
 
     res.json({ prompt });
   } catch (error) {
@@ -31,14 +43,26 @@ router.get(
   authorize("admin", "supervisor"),
   async (req, res) => {
     try {
-      const [prompts] = await pool.query(
-        "SELECT * FROM prompts ORDER BY updated_at DESC"
-      );
+      const { data: prompts, error } = await supabase
+        .from("prompts")
+        .select("*")
+        .order("updated_at", { ascending: false });
 
-      const formattedPrompts = prompts.map((p) => ({
-        ...p,
-        prompt_text: JSON.parse(p.prompt_text),
-      }));
+      if (error) {
+        console.error("Get prompts error:", error);
+        return res.status(500).json({ error: "Server error" });
+      }
+
+      const formattedPrompts = (prompts || []).map((p) => {
+        try {
+          return {
+            ...p,
+            prompt_text: JSON.parse(p.prompt_text),
+          };
+        } catch (e) {
+          return p;
+        }
+      });
 
       res.json({ prompts: formattedPrompts });
     } catch (error) {
@@ -77,17 +101,29 @@ router.post(
       }
 
       // Deactivate all other prompts
-      await pool.query("UPDATE prompts SET is_active = FALSE");
+      await supabase
+        .from("prompts")
+        .update({ is_active: false });
 
       // Insert new prompt
-      const [result] = await pool.query(
-        "INSERT INTO prompts (name, prompt_text, is_active) VALUES (?, ?, ?)",
-        [name, JSON.stringify(parsedPrompt), true]
-      );
+      const { data: newPrompt, error: insertError } = await supabase
+        .from("prompts")
+        .insert({
+          name,
+          prompt_text: JSON.stringify(parsedPrompt),
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Create prompt error:", insertError);
+        return res.status(500).json({ error: "Server error" });
+      }
 
       res.status(201).json({
         message: "Prompt created successfully",
-        prompt_id: result.insertId,
+        prompt_id: newPrompt.id,
       });
     } catch (error) {
       console.error("Create prompt error:", error);
@@ -125,10 +161,10 @@ router.put(
         updates.is_active = is_active;
         // If activating this prompt, deactivate others
         if (is_active) {
-          await pool.query(
-            "UPDATE prompts SET is_active = FALSE WHERE id != ?",
-            [id]
-          );
+          await supabase
+            .from("prompts")
+            .update({ is_active: false })
+            .neq("id", id);
         }
       }
 
@@ -136,7 +172,15 @@ router.put(
         return res.status(400).json({ error: "No fields to update" });
       }
 
-      await pool.query("UPDATE prompts SET ? WHERE id = ?", [updates, id]);
+      const { error } = await supabase
+        .from("prompts")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) {
+        console.error("Update prompt error:", error);
+        return res.status(500).json({ error: "Server error" });
+      }
 
       res.json({ message: "Prompt updated successfully" });
     } catch (error) {
@@ -147,7 +191,3 @@ router.put(
 );
 
 module.exports = router;
-
-
-
-

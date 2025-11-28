@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const pool = require("../config/database");
+const supabase = require("../config/database");
 const { authenticate, authorize } = require("../middleware/auth");
 const { extractInvoiceData } = require("../services/aiService");
 const { buildXml } = require("../services/xmlService");
@@ -67,11 +67,18 @@ router.post("/manual", authenticate, async (req, res) => {
     }
 
     // Check if invoice number already exists
-    const [existing] = await pool.query(
-      "SELECT * FROM invoices WHERE invoice_number = ?",
-      [invoice_number]
-    );
-    if (existing.length > 0) {
+    const { data: existing, error: checkError } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("invoice_number", invoice_number)
+      .limit(1);
+
+    if (checkError) {
+      console.error("Check invoice error:", checkError);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    if (existing && existing.length > 0) {
       return res.status(400).json({ error: "Invoice number already exists" });
     }
 
@@ -89,34 +96,35 @@ router.post("/manual", authenticate, async (req, res) => {
     };
 
     // Save to database
-    const [result] = await pool.query(
-      `INSERT INTO invoices (
-        invoice_number, user_id, file_name, file_type, file_data, file_path,
-        corner_number, e_tax_status, cust_code, pages, currency, payment_method,
-        net_total, delivery_instructions, payment_received_by, has_signatures,
-        extracted_data, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+    const { data: newInvoice, error: insertError } = await supabase
+      .from("invoices")
+      .insert({
         invoice_number,
-        userId,
-        "manual_entry.txt",
-        "manual",
-        null,
-        null,
-        null,
-        e_tax_status || null,
-        cust_code || null,
-        pages || null,
-        currency || null,
-        payment_method || null,
-        net_total ? parseFloat(net_total) : null,
-        delivery_instructions || null,
-        payment_received_by || null,
-        has_signatures || null,
-        JSON.stringify(extractedData),
-        "pending",
-      ]
-    );
+        user_id: userId,
+        file_name: "manual_entry.txt",
+        file_type: "manual",
+        file_data: null,
+        file_path: null,
+        corner_number: null,
+        e_tax_status: e_tax_status || null,
+        cust_code: cust_code || null,
+        pages: pages || null,
+        currency: currency || null,
+        payment_method: payment_method || null,
+        net_total: net_total ? parseFloat(net_total) : null,
+        delivery_instructions: delivery_instructions || null,
+        payment_received_by: payment_received_by || null,
+        has_signatures: has_signatures || null,
+        extracted_data: extractedData,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Insert invoice error:", insertError);
+      return res.status(500).json({ error: "Server error during manual entry" });
+    }
 
     // Create JSON file
     const jsonDir = path.join(__dirname, "../exports/json");
@@ -141,7 +149,7 @@ router.post("/manual", authenticate, async (req, res) => {
 
     res.json({
       message: "Invoice created successfully",
-      invoice_id: result.insertId,
+      invoice_id: newInvoice.id,
       invoice_number: invoice_number,
       extracted_data: extractedData,
       json_file: jsonFilePath,
@@ -176,11 +184,13 @@ router.post(
       const fileData = fs.readFileSync(filePath);
 
       // Get active prompt
-      const [prompts] = await pool.query(
-        "SELECT * FROM prompts WHERE is_active = TRUE LIMIT 1"
-      );
+      const { data: prompts, error: promptError } = await supabase
+        .from("prompts")
+        .select("*")
+        .eq("is_active", true)
+        .limit(1);
 
-      if (prompts.length === 0) {
+      if (promptError || !prompts || prompts.length === 0) {
         return res.status(500).json({ error: "No active prompt found" });
       }
 
@@ -202,19 +212,22 @@ router.post(
 
       if (!extractionResult.success) {
         // Save invoice with error status
-        await pool.query(
-          `INSERT INTO invoices (invoice_number, user_id, file_name, file_type, file_data, file_path, status, extracted_data) 
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-          [
-            `ERROR_${Date.now()}`,
-            userId,
-            fileName,
-            fileType,
-            fileData,
-            filePath,
-            JSON.stringify({ error: extractionResult.error }),
-          ]
-        );
+        const { error: insertError } = await supabase
+          .from("invoices")
+          .insert({
+            invoice_number: `ERROR_${Date.now()}`,
+            user_id: userId,
+            file_name: fileName,
+            file_type: fileType,
+            file_data: fileData,
+            file_path: filePath,
+            status: "pending",
+            extracted_data: { error: extractionResult.error },
+          });
+
+        if (insertError) {
+          console.error("Insert error invoice error:", insertError);
+        }
 
         return res.status(500).json({
           error: "Failed to extract invoice data",
@@ -235,43 +248,50 @@ router.post(
       const invoiceNumber = extractedData.invoice_number || `INV_${Date.now()}`;
 
       // Check if invoice number already exists
-      const [existing] = await pool.query(
-        "SELECT * FROM invoices WHERE invoice_number = ?",
-        [invoiceNumber]
-      );
-      if (existing.length > 0) {
+      const { data: existing, error: checkError } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("invoice_number", invoiceNumber)
+        .limit(1);
+
+      if (checkError) {
+        console.error("Check invoice error:", checkError);
+      }
+
+      if (existing && existing.length > 0) {
         return res.status(400).json({ error: "Invoice number already exists" });
       }
 
       // Save to database
-      const [result] = await pool.query(
-        `INSERT INTO invoices (
-        invoice_number, user_id, file_name, file_type, file_data, file_path,
-        corner_number, e_tax_status, cust_code, pages, currency, payment_method,
-        net_total, delivery_instructions, payment_received_by, has_signatures,
-        extracted_data, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          invoiceNumber,
-          userId,
-          fileName,
-          fileType,
-          fileData,
-          filePath,
-          null,
-          extractedData.e_tax_status || null,
-          extractedData.cust_code || null,
-          extractedData.pages || null,
-          extractedData.currency || null,
-          extractedData.payment_method || null,
-          extractedData.net_total ? parseFloat(extractedData.net_total) : null,
-          extractedData.delivery_instructions || null,
-          extractedData.payment_received_by || null,
-          extractedData.has_signatures || null,
-          JSON.stringify(extractedData),
-          "pending",
-        ]
-      );
+      const { data: newInvoice, error: insertError } = await supabase
+        .from("invoices")
+        .insert({
+          invoice_number: invoiceNumber,
+          user_id: userId,
+          file_name: fileName,
+          file_type: fileType,
+          file_data: fileData,
+          file_path: filePath,
+          corner_number: null,
+          e_tax_status: extractedData.e_tax_status || null,
+          cust_code: extractedData.cust_code || null,
+          pages: extractedData.pages || null,
+          currency: extractedData.currency || null,
+          payment_method: extractedData.payment_method || null,
+          net_total: extractedData.net_total ? parseFloat(extractedData.net_total) : null,
+          delivery_instructions: extractedData.delivery_instructions || null,
+          payment_received_by: extractedData.payment_received_by || null,
+          has_signatures: extractedData.has_signatures || null,
+          extracted_data: extractedData,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Insert invoice error:", insertError);
+        return res.status(500).json({ error: "Server error during upload" });
+      }
 
       // Create JSON file
       const jsonDir = path.join(__dirname, "../exports/json");
@@ -296,7 +316,7 @@ router.post(
 
       res.json({
         message: "File uploaded and processed successfully",
-        invoice_id: result.insertId,
+        invoice_id: newInvoice.id,
         invoice_number: invoiceNumber,
         extracted_data: extractedData,
         json_file: jsonFilePath,
@@ -317,46 +337,74 @@ router.get("/", authenticate, async (req, res) => {
     const { status, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT i.*, u.email as user_email, u.full_name as user_name,
-             r.email as reviewer_email, r.full_name as reviewer_name
-      FROM invoices i
-      LEFT JOIN users u ON i.user_id = u.id
-      LEFT JOIN users r ON i.reviewed_by = r.id
-    `;
-    const params = [];
+    // First get invoices
+    let query = supabase
+      .from("invoices")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
 
     if (status) {
-      query += " WHERE i.status = ?";
-      params.push(status);
+      query = query.eq("status", status);
     }
 
-    query += " ORDER BY i.created_at DESC LIMIT ? OFFSET ?";
-    params.push(parseInt(limit), parseInt(offset));
+    const { data: invoices, error } = await query;
 
-    const [invoices] = await pool.query(query, params);
+    if (error) {
+      console.error("Get invoices error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
 
     // Get total count
-    let countQuery = "SELECT COUNT(*) as total FROM invoices";
+    let countQuery = supabase.from("invoices").select("*", { count: "exact", head: true });
     if (status) {
-      countQuery += " WHERE status = ?";
+      countQuery = countQuery.eq("status", status);
     }
-    const [countResult] = await pool.query(countQuery, status ? [status] : []);
-    const total = countResult[0].total;
+    const { count, error: countError } = await countQuery;
+
+    if (countError) {
+      console.error("Count error:", countError);
+    }
+
+    // Get user info for all invoices
+    const userIds = [...new Set(invoices.map(inv => inv.user_id).filter(Boolean))];
+    const reviewerIds = [...new Set(invoices.map(inv => inv.reviewed_by).filter(Boolean))];
+    const allUserIds = [...new Set([...userIds, ...reviewerIds])];
+    
+    let usersMap = {};
+    if (allUserIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, email, full_name")
+        .in("id", allUserIds);
+      
+      if (!usersError && users) {
+        users.forEach(u => {
+          usersMap[u.id] = u;
+        });
+      }
+    }
+    
+    // Format invoices with user info
+    const formattedInvoices = (invoices || []).map((inv) => ({
+      ...inv,
+      user_email: usersMap[inv.user_id]?.email,
+      user_name: usersMap[inv.user_id]?.full_name,
+      reviewer_email: usersMap[inv.reviewed_by]?.email,
+      reviewer_name: usersMap[inv.reviewed_by]?.full_name,
+      extracted_data:
+        typeof inv.extracted_data === "string"
+          ? JSON.parse(inv.extracted_data)
+          : inv.extracted_data,
+    }));
 
     res.json({
-      invoices: invoices.map((inv) => ({
-        ...inv,
-        extracted_data:
-          typeof inv.extracted_data === "string"
-            ? JSON.parse(inv.extracted_data)
-            : inv.extracted_data,
-      })),
+      invoices: formattedInvoices,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
       },
     });
   } catch (error) {
@@ -370,30 +418,46 @@ router.get("/:id", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [invoices] = await pool.query(
-      `SELECT i.*, u.email as user_email, u.full_name as user_name,
-              r.email as reviewer_email, r.full_name as reviewer_name
-       FROM invoices i
-       LEFT JOIN users u ON i.user_id = u.id
-       LEFT JOIN users r ON i.reviewed_by = r.id
-       WHERE i.id = ?`,
-      [id]
-    );
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", id)
+      .limit(1)
+      .single();
 
-    if (invoices.length === 0) {
+    if (error || !invoice) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
-    const invoice = invoices[0];
+    // Get user and reviewer info
+    const userIds = [invoice.user_id, invoice.reviewed_by].filter(Boolean);
+    let usersMap = {};
+    if (userIds.length > 0) {
+      const { data: users, error: usersError } = await supabase
+        .from("users")
+        .select("id, email, full_name")
+        .in("id", userIds);
+      
+      if (!usersError && users) {
+        users.forEach(u => {
+          usersMap[u.id] = u;
+        });
+      }
+    }
 
     // Convert file_data to base64 for frontend
     let fileDataBase64 = null;
     if (invoice.file_data) {
-      fileDataBase64 = invoice.file_data.toString("base64");
+      // PostgreSQL BYTEA is returned as Buffer in Node.js
+      fileDataBase64 = Buffer.from(invoice.file_data).toString("base64");
     }
-
+    
     res.json({
       ...invoice,
+      user_email: usersMap[invoice.user_id]?.email,
+      user_name: usersMap[invoice.user_id]?.full_name,
+      reviewer_email: usersMap[invoice.reviewed_by]?.email,
+      reviewer_name: usersMap[invoice.reviewed_by]?.full_name,
       file_data_base64: fileDataBase64,
       extracted_data:
         typeof invoice.extracted_data === "string"
@@ -424,17 +488,21 @@ router.put("/:id", authenticate, async (req, res) => {
     } = req.body;
 
     // Check if invoice exists
-    const [invoices] = await pool.query("SELECT * FROM invoices WHERE id = ?", [
-      id,
-    ]);
-    if (invoices.length === 0) {
+    const { data: invoices, error: fetchError } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", id)
+      .limit(1)
+      .single();
+
+    if (fetchError || !invoices) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
     // Build extracted_data object
     const extractedData = {
       e_tax_status: e_tax_status || null,
-      invoice_number: invoice_number || invoices[0].invoice_number,
+      invoice_number: invoice_number || invoices.invoice_number,
       cust_code: cust_code || null,
       pages: pages || null,
       currency: currency || null,
@@ -445,32 +513,32 @@ router.put("/:id", authenticate, async (req, res) => {
       has_signatures: has_signatures || null,
     };
 
-    await pool.query(
-      `UPDATE invoices SET
-        invoice_number = ?, corner_number = ?, e_tax_status = ?, cust_code = ?,
-        pages = ?, currency = ?, payment_method = ?, net_total = ?,
-        delivery_instructions = ?, payment_received_by = ?, has_signatures = ?,
-        extracted_data = ?, status = 'review'
-      WHERE id = ?`,
-      [
-        invoice_number || invoices[0].invoice_number,
-        null,
+    const { error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        invoice_number: invoice_number || invoices.invoice_number,
+        corner_number: null,
         e_tax_status,
         cust_code,
         pages,
         currency,
         payment_method,
-        net_total ? parseFloat(net_total) : null,
+        net_total: net_total ? parseFloat(net_total) : null,
         delivery_instructions,
         payment_received_by,
         has_signatures,
-        JSON.stringify(extractedData),
-        id,
-      ]
-    );
+        extracted_data: extractedData,
+        status: "review",
+      })
+      .eq("id", id);
+
+    if (updateError) {
+      console.error("Update invoice error:", updateError);
+      return res.status(500).json({ error: "Server error" });
+    }
 
     // Update JSON and XML files
-    const invoiceNum = invoice_number || invoices[0].invoice_number;
+    const invoiceNum = invoice_number || invoices.invoice_number;
     const jsonDir = path.join(__dirname, "../exports/json");
     const xmlDir = path.join(__dirname, "../exports/xml");
 
@@ -514,10 +582,19 @@ router.post(
 
       const status = action === "approve" ? "approved" : "rejected";
 
-      await pool.query(
-        "UPDATE invoices SET status = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?",
-        [status, req.user.id, id]
-      );
+      const { error } = await supabase
+        .from("invoices")
+        .update({
+          status,
+          reviewed_by: req.user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (error) {
+        console.error("Review invoice error:", error);
+        return res.status(500).json({ error: "Server error" });
+      }
 
       res.json({ message: `Invoice ${action}d successfully` });
     } catch (error) {
@@ -532,10 +609,15 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    await pool.query("UPDATE invoices SET status = ? WHERE id = ?", [
-      "cancelled",
-      id,
-    ]);
+    const { error } = await supabase
+      .from("invoices")
+      .update({ status: "cancelled" })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Cancel invoice error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
 
     res.json({ message: "Invoice cancelled successfully" });
   } catch (error) {
@@ -549,26 +631,29 @@ router.get("/:id/file", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [invoices] = await pool.query(
-      "SELECT file_name, file_type, file_data FROM invoices WHERE id = ?",
-      [id]
-    );
+    const { data: invoices, error } = await supabase
+      .from("invoices")
+      .select("file_name, file_type, file_data")
+      .eq("id", id)
+      .limit(1)
+      .single();
 
-    if (invoices.length === 0) {
+    if (error || !invoices) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
-    const invoice = invoices[0];
-
     res.setHeader(
       "Content-Type",
-      invoice.file_type === "image" ? "image/jpeg" : "application/pdf"
+      invoices.file_type === "image" ? "image/jpeg" : "application/pdf"
     );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${invoice.file_name}"`
+      `attachment; filename="${invoices.file_name}"`
     );
-    res.send(invoice.file_data);
+    
+    // PostgreSQL BYTEA is returned as Buffer
+    const fileBuffer = Buffer.from(invoices.file_data);
+    res.send(fileBuffer);
   } catch (error) {
     console.error("Download file error:", error);
     res.status(500).json({ error: "Server error" });

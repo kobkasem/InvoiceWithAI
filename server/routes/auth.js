@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const pool = require("../config/database");
+const supabase = require("../config/database");
 const { authenticate, authorize } = require("../middleware/auth");
 
 const JWT_SECRET =
@@ -18,11 +18,18 @@ router.post("/register", async (req, res) => {
     }
 
     // Check if user exists
-    const [existingUsers] = await pool.query(
-      "SELECT * FROM users WHERE email = ?",
-      [email]
-    );
-    if (existingUsers.length > 0) {
+    const { data: existingUsers, error: checkError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .limit(1);
+
+    if (checkError) {
+      console.error("Check user error:", checkError);
+      return res.status(500).json({ error: "Server error during registration" });
+    }
+
+    if (existingUsers && existingUsers.length > 0) {
       return res.status(400).json({ error: "User already exists" });
     }
 
@@ -30,14 +37,25 @@ router.post("/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user with pending role
-    const [result] = await pool.query(
-      "INSERT INTO users (email, password, full_name, role) VALUES (?, ?, ?, ?)",
-      [email, hashedPassword, full_name || "", "pending"]
-    );
+    const { data: newUser, error: insertError } = await supabase
+      .from("users")
+      .insert({
+        email,
+        password: hashedPassword,
+        full_name: full_name || "",
+        role: "pending",
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Insert user error:", insertError);
+      return res.status(500).json({ error: "Server error during registration" });
+    }
 
     res.status(201).json({
       message: "Registration successful. Waiting for admin approval.",
-      user_id: result.insertId,
+      user_id: newUser.id,
     });
   } catch (error) {
     console.error("Registration error:", error);
@@ -55,10 +73,18 @@ router.post("/login", async (req, res) => {
     }
 
     // Find user
-    const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
-    if (users.length === 0) {
+    const { data: users, error: fetchError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .limit(1);
+
+    if (fetchError) {
+      console.error("Fetch user error:", fetchError);
+      return res.status(500).json({ error: "Server error during login" });
+    }
+
+    if (!users || users.length === 0) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -100,11 +126,18 @@ router.post("/login", async (req, res) => {
 // Get current user
 router.get("/me", authenticate, async (req, res) => {
   try {
-    const [users] = await pool.query(
-      "SELECT id, email, full_name, role, status FROM users WHERE id = ?",
-      [req.user.id]
-    );
-    if (users.length === 0) {
+    const { data: users, error: fetchError } = await supabase
+      .from("users")
+      .select("id, email, full_name, role, status")
+      .eq("id", req.user.id)
+      .limit(1);
+
+    if (fetchError) {
+      console.error("Fetch user error:", fetchError);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    if (!users || users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
@@ -116,7 +149,3 @@ router.get("/me", authenticate, async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-

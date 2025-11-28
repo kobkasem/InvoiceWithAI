@@ -72,7 +72,7 @@ This will:
 
 1. Open your browser and go to: http://localhost:3000
 2. Login with default admin account:
-   - **Email**: admin@synnex.com
+   - **Email**: kasem_u@synnex.co.th
    - **Password**: admin123
 
 ### 6. First Steps

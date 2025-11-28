@@ -1,15 +1,22 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../config/database");
+const supabase = require("../config/database");
 const { authenticate, authorize } = require("../middleware/auth");
 
 // Get all users (admin only)
 router.get("/", authenticate, authorize("admin"), async (req, res) => {
   try {
-    const [users] = await pool.query(
-      "SELECT id, email, full_name, role, status, created_at FROM users ORDER BY created_at DESC"
-    );
-    res.json({ users });
+    const { data: users, error } = await supabase
+      .from("users")
+      .select("id, email, full_name, role, status, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Get users error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    res.json({ users: users || [] });
   } catch (error) {
     console.error("Get users error:", error);
     res.status(500).json({ error: "Server error" });
@@ -19,11 +26,18 @@ router.get("/", authenticate, authorize("admin"), async (req, res) => {
 // Get pending users (admin only)
 router.get("/pending", authenticate, authorize("admin"), async (req, res) => {
   try {
-    const [users] = await pool.query(
-      "SELECT id, email, full_name, role, status, created_at FROM users WHERE role = ? ORDER BY created_at DESC",
-      ["pending"]
-    );
-    res.json({ users });
+    const { data: users, error } = await supabase
+      .from("users")
+      .select("id, email, full_name, role, status, created_at")
+      .eq("role", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Get pending users error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
+
+    res.json({ users: users || [] });
   } catch (error) {
     console.error("Get pending users error:", error);
     res.status(500).json({ error: "Server error" });
@@ -40,7 +54,15 @@ router.put("/:id/role", authenticate, authorize("admin"), async (req, res) => {
       return res.status(400).json({ error: "Invalid role" });
     }
 
-    await pool.query("UPDATE users SET role = ? WHERE id = ?", [role, id]);
+    const { error } = await supabase
+      .from("users")
+      .update({ role })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Update role error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
 
     res.json({ message: "User role updated successfully" });
   } catch (error) {
@@ -63,10 +85,15 @@ router.put(
         return res.status(400).json({ error: "Invalid status" });
       }
 
-      await pool.query("UPDATE users SET status = ? WHERE id = ?", [
-        status,
-        id,
-      ]);
+      const { error } = await supabase
+        .from("users")
+        .update({ status })
+        .eq("id", id);
+
+      if (error) {
+        console.error("Update status error:", error);
+        return res.status(500).json({ error: "Server error" });
+      }
 
       res.json({ message: "User status updated successfully" });
     } catch (error) {
@@ -77,7 +104,3 @@ router.put(
 );
 
 module.exports = router;
-
-
-
-

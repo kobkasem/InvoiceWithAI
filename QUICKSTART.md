@@ -31,7 +31,7 @@ This starts:
 
 Open http://localhost:3000 and login with:
 
-- **Email**: admin@synnex.com
+- **Email**: kasem_u@synnex.co.th
 - **Password**: admin123
 
 ## 5. First Actions
@@ -59,7 +59,7 @@ Open http://localhost:3000 and login with:
 
 ## Default Admin
 
-- Email: admin@synnex.com
+- Email: kasem_u@synnex.co.th
 - Password: admin123
 - **⚠️ Change this password after first login!**
 

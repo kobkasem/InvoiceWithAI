@@ -1,4 +1,4 @@
-const mysql = require("mysql2/promise");
+const { createClient } = require("@supabase/supabase-js");
 const dotenv = require("dotenv");
 
 dotenv.config();
@@ -78,40 +78,20 @@ const defaultPromptPayload = JSON.stringify({
   instructions: DEFAULT_PROMPT_INSTRUCTIONS,
 });
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "Th@1land",
-  database: process.env.DB_NAME || "SynnexInvoiceExtractor_cursor",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  charset: "utf8mb4",
-  collation: "utf8mb4_unicode_ci",
-});
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in .env");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize database and tables
 async function initializeDatabase() {
   try {
-    // Create database if not exists
-    const connection = await mysql.createConnection({
-      host: process.env.DB_HOST || "localhost",
-      port: process.env.DB_PORT || 3306,
-      user: process.env.DB_USER || "root",
-      password: process.env.DB_PASSWORD || "Th@1land",
-      charset: "utf8mb4",
-    });
-
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS ${
-        process.env.DB_NAME || "SynnexInvoiceExtractor_cursor"
-      } 
-       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    );
-    await connection.end();
-
-    // Create tables
+    // Check if tables exist and create them if needed
     await createTables();
     console.log("Database initialized successfully");
   } catch (error) {
@@ -120,104 +100,100 @@ async function initializeDatabase() {
 }
 
 async function createTables() {
-  const connection = await pool.getConnection();
-
   try {
-    // Users table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        full_name VARCHAR(255),
-        role ENUM('pending', 'user', 'supervisor', 'admin') DEFAULT 'pending',
-        status ENUM('active', 'inactive') DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
+    // Note: Tables should be created via Supabase SQL Editor or migrations
+    // This function ensures default data exists
+    
+    // Check if default prompt exists
+    const { data: existingPrompts, error: promptError } = await supabase
+      .from("prompts")
+      .select("*")
+      .eq("is_active", true)
+      .limit(1);
 
-    // Invoices table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        invoice_number VARCHAR(255) UNIQUE NOT NULL,
-        user_id INT NOT NULL,
-        file_name VARCHAR(255) NOT NULL,
-        file_type VARCHAR(50) NOT NULL,
-        file_data LONGBLOB,
-        file_path VARCHAR(500),
-        corner_number VARCHAR(50),
-        e_tax_status VARCHAR(50),
-        cust_code VARCHAR(255),
-        pages VARCHAR(50),
-        currency VARCHAR(50),
-        payment_method VARCHAR(100),
-        net_total DECIMAL(15, 2),
-        delivery_instructions TEXT,
-        payment_received_by VARCHAR(100),
-        has_signatures VARCHAR(10),
-        extracted_data JSON,
-        status ENUM('pending', 'review', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
-        reviewed_by INT,
-        reviewed_at TIMESTAMP NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    // Prompts table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS prompts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        prompt_text TEXT NOT NULL,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    // Insert default prompt
-    const [prompts] = await connection.query(
-      "SELECT * FROM prompts WHERE is_active = TRUE LIMIT 1"
-    );
-    if (prompts.length === 0) {
-      const defaultPrompt = {
-        name: DEFAULT_PROMPT_NAME,
-        prompt_text: defaultPromptPayload,
-        is_active: true,
-      };
-      await connection.query("INSERT INTO prompts SET ?", [defaultPrompt]);
-    } else {
-      await connection.query(
-        "UPDATE prompts SET prompt_text = ?, updated_at = NOW() WHERE name = ?",
-        [defaultPromptPayload, DEFAULT_PROMPT_NAME]
-      );
+    if (promptError && promptError.code !== "PGRST116") {
+      // PGRST116 means table doesn't exist - that's OK, will be created via SQL
+      console.log("Note: Prompts table may need to be created via Supabase SQL Editor");
     }
-    // Create admin user if not exists
-    const bcrypt = require("bcryptjs");
-    const [admins] = await connection.query(
-      "SELECT * FROM users WHERE role = 'admin' LIMIT 1"
-    );
-    if (admins.length === 0) {
+
+    if (!existingPrompts || existingPrompts.length === 0) {
+      // Insert default prompt if table exists
+      const { error: insertError } = await supabase
+        .from("prompts")
+        .insert({
+          name: DEFAULT_PROMPT_NAME,
+          prompt_text: defaultPromptPayload,
+          is_active: true,
+        });
+
+      if (insertError && insertError.code !== "PGRST116") {
+        console.log("Note: Could not insert default prompt. Table may need to be created first.");
+      }
+    } else {
+      // Update existing default prompt
+      const { error: updateError } = await supabase
+        .from("prompts")
+        .update({
+          prompt_text: defaultPromptPayload,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("name", DEFAULT_PROMPT_NAME);
+
+      if (updateError && updateError.code !== "PGRST116") {
+        console.log("Note: Could not update default prompt.");
+      }
+    }
+
+    // Check if admin user exists
+    const { data: existingAdmins, error: adminError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "admin")
+      .limit(1);
+
+    if (adminError && adminError.code !== "PGRST116") {
+      console.log("Note: Users table may need to be created via Supabase SQL Editor");
+    }
+
+    // Delete old admin account if it exists
+    await supabase
+      .from("users")
+      .delete()
+      .eq("email", "admin@synnex.com");
+
+    // Check if new admin exists, create if not
+    const { data: newAdmin, error: newAdminError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", "kasem_u@synnex.co.th")
+      .limit(1);
+
+    if (!newAdmin || newAdmin.length === 0) {
+      const bcrypt = require("bcryptjs");
       const hashedPassword = await bcrypt.hash("admin123", 10);
-      await connection.query(
-        "INSERT INTO users (email, password, full_name, role) VALUES (?, ?, ?, ?)",
-        ["admin@synnex.com", hashedPassword, "System Administrator", "admin"]
-      );
+      
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert({
+          email: "kasem_u@synnex.co.th",
+          password: hashedPassword,
+          full_name: "System Administrator",
+          role: "admin",
+        });
+
+      if (insertError && insertError.code !== "PGRST116") {
+        console.log("Note: Could not create admin user. Table may need to be created first.");
+      } else {
+        console.log("Default admin user created: kasem_u@synnex.co.th");
+      }
     }
   } catch (error) {
-    console.error("Table creation error:", error);
-    throw error;
-  } finally {
-    connection.release();
+    console.error("Table initialization error:", error);
+    // Don't throw - tables might need to be created via SQL Editor
   }
 }
 
 // Initialize on module load
 initializeDatabase();
 
-module.exports = pool;
+module.exports = supabase;
