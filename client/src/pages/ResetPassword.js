@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Container,
   Paper,
@@ -12,21 +12,18 @@ import {
   IconButton,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import { useAuth } from "../contexts/AuthContext";
+import axios from "axios";
 
-const Register = () => {
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    confirmPassword: "",
-    full_name: "",
-  });
+const ResetPassword = () => {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleClickShowPassword = () => {
@@ -41,47 +38,73 @@ const Register = () => {
     event.preventDefault();
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  useEffect(() => {
+    if (!token) {
+      setError("Invalid reset link. Please request a new password reset.");
+    }
+  }, [token]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setSuccess(false);
+    setSuccess("");
 
-    if (formData.password !== formData.confirmPassword) {
+    if (password !== confirmPassword) {
       setError("Passwords do not match");
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
     }
 
     setLoading(true);
 
-    const result = await register(
-      formData.email,
-      formData.password,
-      formData.full_name
-    );
+    try {
+      const response = await axios.post("/api/auth/reset-password", {
+        token,
+        password,
+      });
 
-    if (result.success) {
-      setSuccess(true);
+      setSuccess(response.data.message);
       setTimeout(() => {
         navigate("/login");
       }, 2000);
-    } else {
-      setError(result.error);
+    } catch (err) {
+      setError(
+        err.response?.data?.error || "Failed to reset password. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
+
+  if (!token) {
+    return (
+      <Container component="main" maxWidth="xs">
+        <Box
+          sx={{
+            marginTop: 8,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <Paper elevation={3} sx={{ p: 4, width: "100%" }}>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Invalid reset link. Please request a new password reset.
+            </Alert>
+            <Box textAlign="center">
+              <Button onClick={() => navigate("/forgot-password")} variant="contained">
+                Request New Reset Link
+              </Button>
+            </Box>
+          </Paper>
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container component="main" maxWidth="xs">
@@ -95,7 +118,7 @@ const Register = () => {
       >
         <Paper elevation={3} sx={{ p: 4, width: "100%" }}>
           <Typography component="h1" variant="h5" align="center" gutterBottom>
-            Create Account
+            Reset Password
           </Typography>
           <Typography
             variant="body2"
@@ -103,7 +126,7 @@ const Register = () => {
             color="text.secondary"
             sx={{ mb: 3 }}
           >
-            Register for Synnex Invoice Extractor
+            Enter your new password below.
           </Typography>
 
           {error && (
@@ -114,8 +137,7 @@ const Register = () => {
 
           {success && (
             <Alert severity="success" sx={{ mb: 2 }}>
-              Registration successful! Waiting for admin approval. Redirecting
-              to login...
+              {success}
             </Alert>
           )}
 
@@ -124,37 +146,14 @@ const Register = () => {
               margin="normal"
               required
               fullWidth
-              id="full_name"
-              label="Full Name"
-              name="full_name"
-              autoComplete="name"
-              autoFocus
-              value={formData.full_name}
-              onChange={handleChange}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="email"
-              label="Email Address"
-              name="email"
-              autoComplete="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
               name="password"
-              label="Password"
+              label="New Password"
               type={showPassword ? "text" : "password"}
               id="password"
               autoComplete="new-password"
-              value={formData.password}
-              onChange={handleChange}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading || !!success}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -163,6 +162,7 @@ const Register = () => {
                       onClick={handleClickShowPassword}
                       onMouseDown={handleMouseDownPassword}
                       edge="end"
+                      disabled={loading || !!success}
                     >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
@@ -175,11 +175,12 @@ const Register = () => {
               required
               fullWidth
               name="confirmPassword"
-              label="Confirm Password"
+              label="Confirm New Password"
               type={showConfirmPassword ? "text" : "password"}
               id="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={loading || !!success}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -188,6 +189,7 @@ const Register = () => {
                       onClick={handleClickShowConfirmPassword}
                       onMouseDown={handleMouseDownPassword}
                       edge="end"
+                      disabled={loading || !!success}
                     >
                       {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
@@ -200,19 +202,18 @@ const Register = () => {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
-              disabled={loading || success}
+              disabled={loading || !!success}
             >
-              {loading ? "Registering..." : "Register"}
+              {loading ? "Resetting..." : success ? "Password Reset!" : "Reset Password"}
             </Button>
             <Box textAlign="center">
-              <Link
-                to="/login"
-                style={{ textDecoration: "none", color: "inherit" }}
+              <Button
+                onClick={() => navigate("/login")}
+                variant="text"
+                size="small"
               >
-                <Typography variant="body2" color="primary">
-                  Already have an account? Sign In
-                </Typography>
-              </Link>
+                Back to Login
+              </Button>
             </Box>
           </Box>
         </Paper>
@@ -221,8 +222,5 @@ const Register = () => {
   );
 };
 
-export default Register;
-
-
-
+export default ResetPassword;
 

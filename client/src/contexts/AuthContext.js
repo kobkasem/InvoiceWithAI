@@ -49,9 +49,20 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
+      let errorMessage = "Login failed";
+      
+      if (error.code === "ECONNREFUSED" || error.message.includes("Network Error")) {
+        errorMessage = "Cannot connect to server. Please make sure the backend server is running on port 5000.";
+      } else if (error.response) {
+        errorMessage = error.response.data?.error || "Login failed";
+      } else if (error.request) {
+        errorMessage = "Server is not responding. Please check if the backend server is running.";
+      }
+      
+      console.error("Login error:", error);
       return {
         success: false,
-        error: error.response?.data?.error || "Login failed",
+        error: errorMessage,
       };
     }
   };

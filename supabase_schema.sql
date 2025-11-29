@@ -81,26 +81,22 @@ CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON invoices
 CREATE TRIGGER update_prompts_updated_at BEFORE UPDATE ON prompts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Enable Row Level Security (RLS) - Optional but recommended
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE prompts ENABLE ROW LEVEL SECURITY;
+-- Password reset tokens table
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token VARCHAR(255) UNIQUE NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
--- Create policies (adjust based on your security requirements)
--- For now, we'll allow service role to access everything
--- In production, you should create more restrictive policies
+-- Create index for faster token lookups
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
 
--- Policy for users table (users can read their own data, admins can read all)
-CREATE POLICY "Users can read own data" ON users
-  FOR SELECT USING (auth.uid()::text = id::text OR (SELECT role FROM users WHERE id::text = auth.uid()::text) = 'admin');
-
--- Policy for invoices (users can read their own invoices, admins/supervisors can read all)
-CREATE POLICY "Users can read own invoices" ON invoices
-  FOR SELECT USING (
-    user_id::text = auth.uid()::text OR 
-    (SELECT role FROM users WHERE id::text = auth.uid()::text) IN ('admin', 'supervisor')
-  );
-
--- Note: For API access using service role key, RLS policies won't apply
--- The application will handle authorization via JWT middleware
-
+-- Note: Row Level Security (RLS) is disabled by default
+-- Since we're using service role key with JWT middleware for authentication,
+-- RLS policies are not needed. The application handles authorization via middleware.
+-- If you want to enable RLS later, you can do so in Supabase dashboard under Table Settings.
