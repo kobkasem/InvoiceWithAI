@@ -24,16 +24,32 @@ const ManualEntry = () => {
     net_total: "",
     delivery_instructions: "",
     payment_received_by: "",
+    received_by_signature: "",
+    delivered_by_signature: "",
     has_signatures: "",
   });
   const [message, setMessage] = useState({ type: "", text: "" });
   const [saving, setSaving] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({
+    const newValue = e.target.value;
+    const updatedFormData = {
       ...formData,
-      [e.target.name]: e.target.value,
-    });
+      [e.target.name]: newValue,
+    };
+    
+    // Auto-update has_signatures if either signature field is "Yes"
+    if (e.target.name === "received_by_signature" || e.target.name === "delivered_by_signature") {
+      const receivedSig = e.target.name === "received_by_signature" 
+        ? newValue === "Yes" 
+        : formData.received_by_signature === "Yes";
+      const deliveredSig = e.target.name === "delivered_by_signature"
+        ? newValue === "Yes"
+        : formData.delivered_by_signature === "Yes";
+      updatedFormData.has_signatures = receivedSig || deliveredSig ? "Yes" : "No";
+    }
+    
+    setFormData(updatedFormData);
   };
 
   const handleSubmit = async (e) => {
@@ -81,7 +97,7 @@ const ManualEntry = () => {
 
       <Paper component="form" onSubmit={handleSubmit} sx={{ p: 3 }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               required
               fullWidth
@@ -91,7 +107,16 @@ const ManualEntry = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              label="Pages"
+              name="pages"
+              value={formData.pages}
+              onChange={handleChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
               label="E-TAX Status"
@@ -100,7 +125,7 @@ const ManualEntry = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
               label="CUST CODE"
@@ -109,13 +134,25 @@ const ManualEntry = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
-              label="Pages"
-              name="pages"
-              value={formData.pages}
+              label="Payment Method"
+              name="payment_method"
+              value={formData.payment_method}
               onChange={handleChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              label="Net Total"
+              name="net_total"
+              type="text"
+              value={formData.net_total}
+              InputProps={{
+                readOnly: true,
+              }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -130,19 +167,9 @@ const ManualEntry = () => {
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Payment Method"
-              name="payment_method"
-              value={formData.payment_method}
-              onChange={handleChange}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Net Total"
-              name="net_total"
-              type="number"
-              value={formData.net_total}
+              label="รับชำระโดย"
+              name="payment_received_by"
+              value={formData.payment_received_by}
               onChange={handleChange}
             />
           </Grid>
@@ -160,19 +187,30 @@ const ManualEntry = () => {
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Payment Received By"
-              name="payment_received_by"
-              value={formData.payment_received_by}
+              label="มีลายมือชื่อผู้รับสินค้าใช่ไหม"
+              name="received_by_signature"
+              value={formData.received_by_signature || ""}
+              placeholder="Yes or No"
               onChange={handleChange}
+              helperText="Enter 'Yes' if signature detected, 'No' if not"
             />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Has Signatures"
-              name="has_signatures"
-              value={formData.has_signatures}
-              onChange={handleChange}
+              label="มีลายมือชื่อผู้ส่งสินค้าใช่ไหม"
+              name="delivered_by_signature"
+              value={formData.delivered_by_signature || ""}
+              placeholder="Yes or No"
+              onChange={(e) => {
+                handleChange(e);
+                // Auto-update has_signatures if either signature is "Yes"
+                const receivedSig = formData.received_by_signature === "Yes";
+                const deliveredSig = e.target.value === "Yes";
+                const hasSig = receivedSig || deliveredSig ? "Yes" : "No";
+                setFormData(prev => ({ ...prev, has_signatures: hasSig }));
+              }}
+              helperText="Enter 'Yes' if signature detected, 'No' if not"
             />
           </Grid>
         </Grid>

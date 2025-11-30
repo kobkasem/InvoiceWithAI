@@ -54,6 +54,8 @@ const InvoiceDetail = () => {
         net_total: response.data.net_total || "",
         delivery_instructions: response.data.delivery_instructions || "",
         payment_received_by: response.data.payment_received_by || "",
+        received_by_signature: response.data.received_by_signature || "",
+        delivered_by_signature: response.data.delivered_by_signature || "",
         has_signatures: response.data.has_signatures || "",
       });
     } catch (error) {
@@ -166,7 +168,7 @@ const InvoiceDetail = () => {
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
               label="Invoice Number"
@@ -175,7 +177,16 @@ const InvoiceDetail = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              label="Pages"
+              name="pages"
+              value={formData.pages}
+              onChange={handleChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
               label="E-TAX Status"
@@ -184,7 +195,7 @@ const InvoiceDetail = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
               label="CUST CODE"
@@ -193,13 +204,25 @@ const InvoiceDetail = () => {
               onChange={handleChange}
             />
           </Grid>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
-              label="Pages"
-              name="pages"
-              value={formData.pages}
+              label="Payment Method"
+              name="payment_method"
+              value={formData.payment_method}
               onChange={handleChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              label="Net Total"
+              name="net_total"
+              type="text"
+              value={formData.net_total}
+              InputProps={{
+                readOnly: true,
+              }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -214,19 +237,9 @@ const InvoiceDetail = () => {
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Payment Method"
-              name="payment_method"
-              value={formData.payment_method}
-              onChange={handleChange}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Net Total"
-              name="net_total"
-              type="number"
-              value={formData.net_total}
+              label="รับชำระโดย"
+              name="payment_received_by"
+              value={formData.payment_received_by}
               onChange={handleChange}
             />
           </Grid>
@@ -244,19 +257,25 @@ const InvoiceDetail = () => {
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Payment Received By"
-              name="payment_received_by"
-              value={formData.payment_received_by}
-              onChange={handleChange}
+              label="มีลายมือชื่อผู้รับสินค้าใช่ไหม"
+              name="received_by_signature"
+              value={formData.received_by_signature || ""}
+              InputProps={{
+                readOnly: true,
+              }}
+              helperText="AI detected signature: Yes/No"
             />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Has Signatures"
-              name="has_signatures"
-              value={formData.has_signatures}
-              onChange={handleChange}
+              label="มีลายมือชื่อผู้ส่งสินค้าใช่ไหม"
+              name="delivered_by_signature"
+              value={formData.delivered_by_signature || ""}
+              InputProps={{
+                readOnly: true,
+              }}
+              helperText="AI detected signature: Yes/No"
             />
           </Grid>
         </Grid>

@@ -4,20 +4,15 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Box,
   IconButton,
   Avatar,
   Menu,
   MenuItem,
   Divider,
+  Button,
 } from "@mui/material";
 import {
-  Menu as MenuIcon,
   Dashboard as DashboardIcon,
   Upload as UploadIcon,
   List as ListIcon,
@@ -27,21 +22,16 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   AccountCircle as AccountCircleIcon,
+  Menu as MenuIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 
-const drawerWidth = 240;
-
 const Layout = () => {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, isAdmin, isSupervisor } = useAuth();
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
 
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -49,6 +39,19 @@ const Layout = () => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleMainMenuOpen = (event) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMainMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
+  const handleMenuItemClick = (path) => {
+    navigate(path);
+    handleMainMenuClose();
   };
 
   const handleLogout = () => {
@@ -96,59 +99,55 @@ const Layout = () => {
     },
   ];
 
-  const drawer = (
-    <Box>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Synnex Invoice
-        </Typography>
-      </Toolbar>
-      <Divider />
-      <List>
-        {menuItems
-          .filter((item) => item.show)
-          .map((item) => (
-            <ListItem
-              button
-              key={item.text}
-              selected={location.pathname === item.path}
-              onClick={() => {
-                navigate(item.path);
-                setMobileOpen(false);
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column" }}>
+      <AppBar position="fixed">
+        <Toolbar>
+          <Typography variant="h6" noWrap component="div" sx={{ mr: 4 }}>
+            Synnex Invoice
+          </Typography>
+          <Box sx={{ flexGrow: 1 }}>
+            <IconButton
+              color="inherit"
+              edge="start"
+              onClick={handleMainMenuOpen}
+              sx={{
+                mr: 2,
+                backgroundColor: Boolean(menuAnchorEl)
+                  ? "rgba(255, 255, 255, 0.2)"
+                  : "transparent",
+                "&:hover": {
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                },
               }}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItem>
-          ))}
-      </List>
-    </Box>
-  );
-
-  return (
-    <Box sx={{ display: "flex" }}>
-      <AppBar
-        position="fixed"
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-        }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: "none" } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Invoice Extractor
-          </Typography>
+              <MenuIcon />
+            </IconButton>
+            <Menu
+              anchorEl={menuAnchorEl}
+              open={Boolean(menuAnchorEl)}
+              onClose={handleMainMenuClose}
+            >
+              {menuItems
+                .filter((item) => item.show)
+                .map((item) => (
+                  <MenuItem
+                    key={item.text}
+                    onClick={() => handleMenuItemClick(item.path)}
+                    selected={location.pathname === item.path}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      {item.icon}
+                      {item.text}
+                    </Box>
+                  </MenuItem>
+                ))}
+            </Menu>
+          </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="body2">{user?.email}</Typography>
+            <Typography variant="body2" sx={{ display: { xs: "none", sm: "block" } }}>
+              {user?.email}
+            </Typography>
             <IconButton onClick={handleMenuOpen} color="inherit">
               <Avatar sx={{ width: 32, height: 32 }}>
                 <AccountCircleIcon />
@@ -169,9 +168,7 @@ const Layout = () => {
               </MenuItem>
               <Divider />
               <MenuItem onClick={handleLogout}>
-                <ListItemIcon>
-                  <LogoutIcon fontSize="small" />
-                </ListItemIcon>
+                <LogoutIcon fontSize="small" sx={{ mr: 1 }} />
                 Logout
               </MenuItem>
             </Menu>
@@ -179,46 +176,10 @@ const Layout = () => {
         </Toolbar>
       </AppBar>
       <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-      >
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true,
-          }}
-          sx={{
-            display: { xs: "block", sm: "none" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: "none", sm: "block" },
-            "& .MuiDrawer-paper": {
-              boxSizing: "border-box",
-              width: drawerWidth,
-            },
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
-      </Box>
-      <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
           mt: 8,
         }}
       >
@@ -229,6 +190,7 @@ const Layout = () => {
 };
 
 export default Layout;
+
 
 
 
