@@ -8,8 +8,6 @@ import {
   Alert,
   CircularProgress,
   Grid,
-  FormControlLabel,
-  Switch,
 } from "@mui/material";
 import { Save as SaveIcon } from "@mui/icons-material";
 import axios from "axios";
