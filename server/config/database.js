@@ -96,7 +96,10 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in .env");
+  console.error("Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in environment variables.");
+  console.error("Current SUPABASE_URL:", supabaseUrl ? "Set" : "NOT SET");
+  console.error("Current SUPABASE_ANON_KEY:", supabaseKey ? "Set" : "NOT SET");
+  throw new Error("Missing required environment variables: SUPABASE_URL and SUPABASE_ANON_KEY must be set in Railway Variables.");
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
