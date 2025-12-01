@@ -59,6 +59,8 @@ router.post("/manual", authenticate, async (req, res) => {
       net_total,
       delivery_instructions,
       payment_received_by,
+      received_by_signature,
+      delivered_by_signature,
       has_signatures,
     } = req.body;
 
@@ -66,7 +68,17 @@ router.post("/manual", authenticate, async (req, res) => {
       return res.status(400).json({ error: "Invoice number is required" });
     }
 
-    // Check if invoice number already exists
+    // Compute has_signatures if not provided: "Yes" if either signature is "Yes"
+    let computedHasSignatures = has_signatures;
+    if (!computedHasSignatures) {
+      if (received_by_signature === "Yes" || delivered_by_signature === "Yes") {
+        computedHasSignatures = "Yes";
+      } else {
+        computedHasSignatures = "No";
+      }
+    }
+
+    // Check if invoice number already exists (allow if previous invoice is cancelled)
     const { data: existing, error: checkError } = await supabase
       .from("invoices")
       .select("*")
@@ -79,7 +91,15 @@ router.post("/manual", authenticate, async (req, res) => {
     }
 
     if (existing && existing.length > 0) {
-      return res.status(400).json({ error: "Invoice number already exists" });
+      const existingInvoice = existing[0];
+      // Allow re-entry if the existing invoice is cancelled
+      if (existingInvoice.status !== "cancelled") {
+        return res.status(400).json({ 
+          error: "Invoice number already exists",
+          details: `An invoice with this number already exists with status: ${existingInvoice.status}`
+        });
+      }
+      // If cancelled, allow re-entry (will create new invoice with same number)
     }
 
     const extractedData = {
@@ -92,32 +112,45 @@ router.post("/manual", authenticate, async (req, res) => {
       net_total: net_total || null,
       delivery_instructions: delivery_instructions || null,
       payment_received_by: payment_received_by || null,
-      has_signatures: has_signatures || null,
+      received_by_signature: received_by_signature || null,
+      delivered_by_signature: delivered_by_signature || null,
+      has_signatures: computedHasSignatures || null,
     };
+
+    // Prepare insert data
+    const insertData = {
+      invoice_number,
+      user_id: userId,
+      file_name: "manual_entry.txt",
+      file_type: "manual",
+      file_data: null,
+      file_path: null,
+      corner_number: null,
+      e_tax_status: e_tax_status || null,
+      cust_code: cust_code || null,
+      pages: pages || null,
+      currency: currency || null,
+      payment_method: payment_method || null,
+      net_total: net_total ? parseFloat(net_total) : null,
+      delivery_instructions: delivery_instructions || null,
+      payment_received_by: payment_received_by || null,
+      has_signatures: computedHasSignatures || null,
+      extracted_data: extractedData,
+      status: "pending",
+    };
+
+    // Add signature fields only if provided
+    if (received_by_signature !== undefined) {
+      insertData.received_by_signature = received_by_signature || null;
+    }
+    if (delivered_by_signature !== undefined) {
+      insertData.delivered_by_signature = delivered_by_signature || null;
+    }
 
     // Save to database
     const { data: newInvoice, error: insertError } = await supabase
       .from("invoices")
-      .insert({
-        invoice_number,
-        user_id: userId,
-        file_name: "manual_entry.txt",
-        file_type: "manual",
-        file_data: null,
-        file_path: null,
-        corner_number: null,
-        e_tax_status: e_tax_status || null,
-        cust_code: cust_code || null,
-        pages: pages || null,
-        currency: currency || null,
-        payment_method: payment_method || null,
-        net_total: net_total ? parseFloat(net_total) : null,
-        delivery_instructions: delivery_instructions || null,
-        payment_received_by: payment_received_by || null,
-        has_signatures: has_signatures || null,
-        extracted_data: extractedData,
-        status: "pending",
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -157,9 +190,12 @@ router.post("/manual", authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error("Manual entry error:", error);
+    console.error("Error stack:", error.stack);
+    console.error("Request body:", req.body);
     res.status(500).json({
       error: "Server error during manual entry",
       details: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 });
@@ -247,7 +283,7 @@ router.post(
       }
       const invoiceNumber = extractedData.invoice_number || `INV_${Date.now()}`;
 
-      // Check if invoice number already exists
+      // Check if invoice number already exists (allow if previous invoice is cancelled)
       const { data: existing, error: checkError } = await supabase
         .from("invoices")
         .select("*")
@@ -259,32 +295,51 @@ router.post(
       }
 
       if (existing && existing.length > 0) {
-        return res.status(400).json({ error: "Invoice number already exists" });
+        const existingInvoice = existing[0];
+        // Allow re-entry if the existing invoice is cancelled
+        if (existingInvoice.status !== "cancelled") {
+          return res.status(400).json({ 
+            error: "Invoice number already exists",
+            details: `An invoice with this number already exists with status: ${existingInvoice.status}`
+          });
+        }
+        // If cancelled, allow re-entry (will create new invoice with same number)
+      }
+
+      // Prepare insert data
+      const insertData = {
+        invoice_number: invoiceNumber,
+        user_id: userId,
+        file_name: fileName,
+        file_type: fileType,
+        file_data: fileData,
+        file_path: filePath,
+        corner_number: null,
+        e_tax_status: extractedData.e_tax_status || null,
+        cust_code: extractedData.cust_code || null,
+        pages: extractedData.pages || null,
+        currency: extractedData.currency || null,
+        payment_method: extractedData.payment_method || null,
+        net_total: extractedData.net_total ? parseFloat(extractedData.net_total) : null,
+        delivery_instructions: extractedData.delivery_instructions || null,
+        payment_received_by: extractedData.payment_received_by || null,
+        has_signatures: extractedData.has_signatures || null,
+        extracted_data: extractedData,
+        status: "pending",
+      };
+
+      // Add signature fields only if they exist in extractedData
+      if (extractedData.received_by_signature !== undefined) {
+        insertData.received_by_signature = extractedData.received_by_signature || null;
+      }
+      if (extractedData.delivered_by_signature !== undefined) {
+        insertData.delivered_by_signature = extractedData.delivered_by_signature || null;
       }
 
       // Save to database
       const { data: newInvoice, error: insertError } = await supabase
         .from("invoices")
-        .insert({
-          invoice_number: invoiceNumber,
-          user_id: userId,
-          file_name: fileName,
-          file_type: fileType,
-          file_data: fileData,
-          file_path: filePath,
-          corner_number: null,
-          e_tax_status: extractedData.e_tax_status || null,
-          cust_code: extractedData.cust_code || null,
-          pages: extractedData.pages || null,
-          currency: extractedData.currency || null,
-          payment_method: extractedData.payment_method || null,
-          net_total: extractedData.net_total ? parseFloat(extractedData.net_total) : null,
-          delivery_instructions: extractedData.delivery_instructions || null,
-          payment_received_by: extractedData.payment_received_by || null,
-          has_signatures: extractedData.has_signatures || null,
-          extracted_data: extractedData,
-          status: "pending",
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -484,8 +539,20 @@ router.put("/:id", authenticate, async (req, res) => {
       net_total,
       delivery_instructions,
       payment_received_by,
+      received_by_signature,
+      delivered_by_signature,
       has_signatures,
     } = req.body;
+
+    // Compute has_signatures if not provided: "Yes" if either signature is "Yes"
+    let computedHasSignatures = has_signatures;
+    if (!computedHasSignatures) {
+      if (received_by_signature === "Yes" || delivered_by_signature === "Yes") {
+        computedHasSignatures = "Yes";
+      } else {
+        computedHasSignatures = "No";
+      }
+    }
 
     // Check if invoice exists
     const { data: invoices, error: fetchError } = await supabase
@@ -499,6 +566,32 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
+    // If invoice number is being changed, check if new number already exists (allow if cancelled)
+    if (invoice_number && invoice_number !== invoices.invoice_number) {
+      const { data: existing, error: checkError } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("invoice_number", invoice_number)
+        .neq("id", id) // Exclude current invoice
+        .limit(1);
+
+      if (checkError) {
+        console.error("Check invoice error:", checkError);
+        return res.status(500).json({ error: "Server error" });
+      }
+
+      if (existing && existing.length > 0) {
+        const existingInvoice = existing[0];
+        // Allow if the existing invoice is cancelled
+        if (existingInvoice.status !== "cancelled") {
+          return res.status(400).json({ 
+            error: "Invoice number already exists",
+            details: `An invoice with this number already exists with status: ${existingInvoice.status}`
+          });
+        }
+      }
+    }
+
     // Build extracted_data object
     const extractedData = {
       e_tax_status: e_tax_status || null,
@@ -510,26 +603,39 @@ router.put("/:id", authenticate, async (req, res) => {
       net_total: net_total || null,
       delivery_instructions: delivery_instructions || null,
       payment_received_by: payment_received_by || null,
-      has_signatures: has_signatures || null,
+      received_by_signature: received_by_signature || null,
+      delivered_by_signature: delivered_by_signature || null,
+      has_signatures: computedHasSignatures || null,
     };
+
+    // Prepare update data
+    const updateData = {
+      invoice_number: invoice_number || invoices.invoice_number,
+      corner_number: null,
+      e_tax_status,
+      cust_code,
+      pages,
+      currency,
+      payment_method,
+      net_total: net_total ? parseFloat(net_total) : null,
+      delivery_instructions,
+      payment_received_by,
+      has_signatures: computedHasSignatures || null,
+      extracted_data: extractedData,
+      status: "review",
+    };
+
+    // Add signature fields only if provided
+    if (received_by_signature !== undefined) {
+      updateData.received_by_signature = received_by_signature || null;
+    }
+    if (delivered_by_signature !== undefined) {
+      updateData.delivered_by_signature = delivered_by_signature || null;
+    }
 
     const { error: updateError } = await supabase
       .from("invoices")
-      .update({
-        invoice_number: invoice_number || invoices.invoice_number,
-        corner_number: null,
-        e_tax_status,
-        cust_code,
-        pages,
-        currency,
-        payment_method,
-        net_total: net_total ? parseFloat(net_total) : null,
-        delivery_instructions,
-        payment_received_by,
-        has_signatures,
-        extracted_data: extractedData,
-        status: "review",
-      })
+      .update(updateData)
       .eq("id", id);
 
     if (updateError) {

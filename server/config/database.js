@@ -50,12 +50,18 @@ Return the value exactly as seen, character for character.
 4. Always extract the "จำนวนเงิน" (amount of money) if it is written.
 
 10 Check for signatures and dates at RECEIVED BY
-→ If present, write "Yes".
-→ If absent, write "No".
+→ Look VERY CAREFULLY for handwriting/signature in the "RECEIVED BY" or "Payment Received By" section.
+→ Analyze the image to detect if there is actual handwriting (signature) written by hand, not just printed text.
+→ If handwriting/signature is clearly present and visible, write "Yes".
+→ If absent, only printed text, or no signature visible, write "No".
+→ Be precise: only "Yes" if you can clearly see handwritten signature, otherwise "No".
 
-11 Check for signatures and dates at DELIVERY BY
-→ If present, write "Yes".
-→ If absent, write "No".
+11 Check for signatures and dates at DELIVERED BY (or DELIVERY BY)
+→ Look VERY CAREFULLY for handwriting/signature in the "DELIVERED BY" or "DELIVERY BY" or "Delivery By" section.
+→ Analyze the image to detect if there is actual handwriting (signature) written by hand, not just printed text.
+→ If handwriting/signature is clearly present and visible, write "Yes".
+→ If absent, only printed text, or no signature visible, write "No".
+→ Be precise: only "Yes" if you can clearly see handwritten signature, otherwise "No".
 
 IMPORTANT: You MUST return ONLY valid JSON format with ALL fields. Do not include any text before or after the JSON. Use this exact structure:
 
@@ -69,8 +75,15 @@ IMPORTANT: You MUST return ONLY valid JSON format with ALL fields. Do not includ
   "net_total": "",
   "delivery_instructions": "",
   "payment_received_by": "",
+  "received_by_signature": "",
+  "delivered_by_signature": "",
   "has_signatures": ""
 }
+
+Note: 
+- received_by_signature: Check "RECEIVED BY" section for handwriting/signature
+- delivered_by_signature: Check "DELIVERED BY" or "DELIVERY BY" section for handwriting/signature
+- has_signatures: Set to "Yes" if EITHER received_by_signature OR delivered_by_signature is "Yes", otherwise "No"
 
 If a field cannot be found, use an empty string "". Do not omit any fields.`;
 

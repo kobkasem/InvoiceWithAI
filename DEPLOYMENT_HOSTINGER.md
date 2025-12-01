@@ -306,3 +306,5 @@ If you choose a hosting plan without MySQL, you can:
 **Recommendation**: Start with **VPS 2** (2GB RAM) - it provides enough resources for MySQL, Node.js, and file processing without being overkill for most use cases.
 
 
+
+

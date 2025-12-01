@@ -206,3 +206,5 @@ npm run dev
 **Bottom Line:** Your app works on Windows for development. For Hostinger VPS production, choose **Ubuntu 22.04 LTS** - it's the best option for Node.js + MySQL applications.
 
 
+
+

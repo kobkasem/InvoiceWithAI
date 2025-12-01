@@ -17,6 +17,8 @@ function buildXml(data) {
       net_total: data.net_total || "",
       delivery_instructions: data.delivery_instructions || "",
       payment_received_by: data.payment_received_by || "",
+      received_by_signature: data.received_by_signature || "",
+      delivered_by_signature: data.delivered_by_signature || "",
       has_signatures: data.has_signatures || "",
     },
   };

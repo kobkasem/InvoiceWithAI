@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Invoices table
 CREATE TABLE IF NOT EXISTS invoices (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  invoice_number VARCHAR(255) UNIQUE NOT NULL,
+  invoice_number VARCHAR(255) NOT NULL,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   file_name VARCHAR(255) NOT NULL,
   file_type VARCHAR(50) NOT NULL,
@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   net_total DECIMAL(15, 2),
   delivery_instructions TEXT,
   payment_received_by VARCHAR(100),
+  received_by_signature VARCHAR(10),
+  delivered_by_signature VARCHAR(10),
   has_signatures VARCHAR(10),
   extracted_data JSONB,
   status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'review', 'approved', 'rejected', 'cancelled')),
@@ -58,6 +60,12 @@ CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_invoice_number ON invoices(invoice_number);
 CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);
+
+-- Create unique partial index: only enforce uniqueness for non-cancelled invoices
+-- This allows multiple cancelled invoices with the same number, but prevents duplicates for active invoices
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_invoice_number_unique 
+ON invoices(invoice_number) 
+WHERE status != 'cancelled';
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_prompts_is_active ON prompts(is_active);
