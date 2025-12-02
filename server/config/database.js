@@ -91,22 +91,33 @@ const defaultPromptPayload = JSON.stringify({
   instructions: DEFAULT_PROMPT_INSTRUCTIONS,
 });
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+// Debug: Log all environment variables (for troubleshooting)
+console.log("🔍 Checking environment variables...");
+console.log("📍 All env vars starting with 'SUPABASE':", Object.keys(process.env).filter(key => key.includes('SUPABASE')));
+console.log("📍 All env vars starting with 'SUP':", Object.keys(process.env).filter(key => key.startsWith('SUP')));
+
+// Initialize Supabase client - check multiple possible variable names
+const supabaseUrl = process.env.SUPABASE_URL || process.env.supabase_url || process.env.Supabase_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.supabase_anon_key || process.env.supabase_key;
+
+// Trim whitespace if present
+const cleanUrl = supabaseUrl ? supabaseUrl.trim() : null;
+const cleanKey = supabaseKey ? supabaseKey.trim() : null;
 
 let supabase = null;
 
-if (!supabaseUrl || !supabaseKey) {
+if (!cleanUrl || !cleanKey) {
   console.error("⚠️  Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in environment variables.");
-  console.error("Current SUPABASE_URL:", supabaseUrl ? "Set" : "NOT SET");
-  console.error("Current SUPABASE_ANON_KEY:", supabaseKey ? "Set" : "NOT SET");
+  console.error("Current SUPABASE_URL:", cleanUrl ? `Set (length: ${cleanUrl.length})` : "NOT SET");
+  console.error("Current SUPABASE_ANON_KEY:", cleanKey ? `Set (length: ${cleanKey.length})` : "NOT SET");
   console.error("⚠️  Server will start but database features will not work until variables are set.");
-  console.error("⚠️  Add variables in Railway Dashboard → Variables tab, then redeploy.");
+  console.error("⚠️  Add variables in Railway Dashboard → Your SERVICE → Variables tab (NOT project level), then redeploy.");
+  console.error("⚠️  Variable names must be EXACTLY: SUPABASE_URL and SUPABASE_ANON_KEY (case-sensitive)");
 } else {
   try {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(cleanUrl, cleanKey);
     console.log("✅ Supabase client initialized successfully");
+    console.log("📍 Supabase URL:", cleanUrl.substring(0, 30) + "...");
   } catch (error) {
     console.error("❌ Error creating Supabase client:", error.message);
     console.error("⚠️  Server will start but database features will not work.");
