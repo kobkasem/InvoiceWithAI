@@ -35,10 +35,25 @@ app.get("/favicon.ico", (req, res) => {
   res.status(204).end();
 });
 
-// Health check (must be before other routes)
+// Health check - FIRST route, before anything else
 app.get("/api/health", (req, res) => {
   console.log("✅ Health check endpoint hit");
-  res.json({ status: "OK", message: "Server is running", timestamp: new Date().toISOString() });
+  console.log("   Request URL:", req.url);
+  console.log("   Request Original URL:", req.originalUrl);
+  console.log("   Request Method:", req.method);
+  res.json({ 
+    status: "OK", 
+    message: "Server is running",
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV || "not set"
+  });
+});
+
+// Test route - simple test
+app.get("/test", (req, res) => {
+  console.log("🧪 Test route hit");
+  res.json({ test: "OK", message: "Server is responding" });
 });
 
 // Routes - load with error handling
@@ -77,57 +92,36 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Serve client build in production (must be after API routes)
 if (fs.existsSync(clientBuildPath)) {
   console.log("✅ Client build folder found, serving static files");
-  app.use(express.static(clientBuildPath));
+  
+  // Serve static files (CSS, JS, images, etc.) but NOT index.html yet
+  app.use(express.static(clientBuildPath, { index: false }));
+
+  // Root route - serve React app
+  app.get("/", (req, res) => {
+    console.log("📍 Root route - serving React app");
+    res.sendFile(path.join(clientBuildPath, "index.html"));
+  });
 
   // Catch-all handler: send back React's index.html for non-API routes
-  app.get(/^\/(?!api).*/, (req, res) => {
+  // Exclude: /api/*, /test, /uploads/*
+  app.get(/^\/(?!api|test|uploads).*/, (req, res) => {
+    console.log("📍 Catch-all route - serving React app for:", req.url);
     res.sendFile(path.join(clientBuildPath, "index.html"));
   });
 } else {
   console.warn("⚠️  Client build folder not found at:", clientBuildPath);
   console.warn("⚠️  Make sure to run 'npm run build' in client directory");
   
-  // Fallback: serve a helpful error page
+  // Fallback root route when build doesn't exist
   app.get("/", (req, res) => {
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Synnex Invoice Extractor - Setup Required</title>
-          <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-            h1 { color: #1976d2; }
-            .error { background: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            .success { background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
-            a { color: #1976d2; }
-          </style>
-        </head>
-        <body>
-          <h1>🚂 Synnex Invoice Extractor</h1>
-          <div class="error">
-            <h2>⚠️ Frontend Build Not Found</h2>
-            <p>The React frontend build folder is missing. This usually means:</p>
-            <ul>
-              <li>The build didn't complete successfully</li>
-              <li>Check Railway build logs for errors</li>
-            </ul>
-          </div>
-          <div class="success">
-            <h2>✅ Server is Running</h2>
-            <p>Your Express server is running correctly!</p>
-            <p>Test API: <a href="/api/health">/api/health</a></p>
-          </div>
-          <h2>🔧 How to Fix</h2>
-          <ol>
-            <li>Go to Railway Dashboard → Deployments</li>
-            <li>Check build logs for errors</li>
-            <li>Verify build command includes: <code>npm run build</code> in client directory</li>
-            <li>Redeploy if needed</li>
-          </ol>
-        </body>
-      </html>
-    `);
+    res.json({ 
+      message: "Synnex Invoice Extractor API", 
+      status: "running",
+      frontend: "Build not found - check Railway build logs",
+      health: "/api/health",
+      test: "/test",
+      timestamp: new Date().toISOString()
+    });
   });
 }
 
