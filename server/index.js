@@ -40,10 +40,28 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Serve client build in production
 if (fs.existsSync(clientBuildPath)) {
+  console.log("✅ Client build folder found, serving static files");
   app.use(express.static(clientBuildPath));
 
   app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(path.join(clientBuildPath, "index.html"));
+  });
+} else {
+  console.warn("⚠️  Client build folder not found at:", clientBuildPath);
+  console.warn("⚠️  Make sure to run 'npm run build' in client directory");
+  
+  // Fallback: serve a simple message
+  app.get("/", (req, res) => {
+    res.send(`
+      <html>
+        <head><title>Synnex Invoice Extractor</title></head>
+        <body>
+          <h1>Synnex Invoice Extractor</h1>
+          <p>Frontend build not found. Please check Railway build logs.</p>
+          <p>API is running. Health check: <a href="/api/health">/api/health</a></p>
+        </body>
+      </html>
+    `);
   });
 }
 
