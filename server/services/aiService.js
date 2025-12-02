@@ -10,18 +10,35 @@ dotenv.config();
 // Validate API key
 const apiKey = process.env.OPENAI_API_KEY;
 
+let openai = null;
+
 if (!apiKey || apiKey === "your-openai-api-key-here" || apiKey.includes("your-ope")) {
-  console.error("⚠️ WARNING: OpenAI API key is not configured properly!");
-  console.error("   Current value:", apiKey ? `${apiKey.substring(0, 20)}...` : "undefined");
-  console.error("   Please update OPENAI_API_KEY in .env file");
-  console.error("   Get your API key at: https://platform.openai.com/account/api-keys");
+  console.warn("⚠️ WARNING: OpenAI API key is not configured properly!");
+  console.warn("   Current value:", apiKey ? `${apiKey.substring(0, 20)}...` : "undefined");
+  console.warn("   Please set OPENAI_API_KEY in Railway Variables");
+  console.warn("   Get your API key at: https://platform.openai.com/account/api-keys");
+  console.warn("   AI extraction features will not work until API key is set.");
+} else {
+  try {
+    openai = new OpenAI({
+      apiKey: apiKey,
+    });
+    console.log("✅ OpenAI client initialized successfully");
+  } catch (error) {
+    console.error("❌ Error creating OpenAI client:", error.message);
+    console.warn("⚠️  AI extraction features will not work.");
+  }
 }
 
-const openai = new OpenAI({
-  apiKey: apiKey,
-});
-
 async function extractInvoiceData(filePath, fileType, promptText) {
+  if (!openai) {
+    return {
+      success: false,
+      error: "OpenAI API key is not configured. Please set OPENAI_API_KEY in Railway Variables.",
+      data: null,
+    };
+  }
+
   try {
     let imageBase64;
     let isPdf = false;
