@@ -10,6 +10,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const clientBuildPath = path.join(__dirname, "../client/build");
 
+// Log startup info
+console.log("🚀 Starting server...");
+console.log("📍 PORT:", PORT);
+console.log("📍 NODE_ENV:", process.env.NODE_ENV || "not set");
+console.log("📍 Client build path:", clientBuildPath);
+console.log("📍 Client build exists:", fs.existsSync(clientBuildPath));
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -30,15 +37,39 @@ app.get("/favicon.ico", (req, res) => {
 
 // Health check (must be before other routes)
 app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", message: "Server is running" });
+  console.log("✅ Health check endpoint hit");
+  res.json({ status: "OK", message: "Server is running", timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/users", require("./routes/users"));
-app.use("/api/invoices", require("./routes/invoices"));
-app.use("/api/prompts", require("./routes/prompts"));
-app.use("/api/dashboard", require("./routes/dashboard"));
+// Routes - load with error handling
+try {
+  console.log("📦 Loading API routes...");
+  app.use("/api/auth", require("./routes/auth"));
+  console.log("   ✅ /api/auth loaded");
+  
+  app.use("/api/users", require("./routes/users"));
+  console.log("   ✅ /api/users loaded");
+  
+  app.use("/api/invoices", require("./routes/invoices"));
+  console.log("   ✅ /api/invoices loaded");
+  
+  app.use("/api/prompts", require("./routes/prompts"));
+  console.log("   ✅ /api/prompts loaded");
+  
+  app.use("/api/dashboard", require("./routes/dashboard"));
+  console.log("   ✅ /api/dashboard loaded");
+  
+  console.log("✅ All API routes loaded successfully");
+} catch (error) {
+  console.error("❌ Error loading routes:", error);
+  // Don't crash - server can still serve health check
+}
+
+// 404 handler for API routes (must be before React static serving)
+app.use("/api/*", (req, res) => {
+  console.log(`❌ API route not found: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: "API endpoint not found", path: req.originalUrl });
+});
 
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -100,6 +131,25 @@ if (fs.existsSync(clientBuildPath)) {
   });
 }
 
+// Start server
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Health check available at: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`✅ API routes registered:`);
+  console.log(`   - GET  /api/health`);
+  console.log(`   - POST /api/auth/*`);
+  console.log(`   - GET  /api/users/*`);
+  console.log(`   - GET  /api/invoices/*`);
+  console.log(`   - GET  /api/prompts/*`);
+  console.log(`   - GET  /api/dashboard/*`);
+});
+
+// Handle uncaught errors
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
 });
