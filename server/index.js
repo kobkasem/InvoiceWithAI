@@ -28,6 +28,11 @@ app.get("/favicon.ico", (req, res) => {
   res.status(204).end();
 });
 
+// Health check (must be before other routes)
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", message: "Server is running" });
+});
+
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
@@ -38,11 +43,12 @@ app.use("/api/dashboard", require("./routes/dashboard"));
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Serve client build in production
+// Serve client build in production (must be after API routes)
 if (fs.existsSync(clientBuildPath)) {
   console.log("✅ Client build folder found, serving static files");
   app.use(express.static(clientBuildPath));
 
+  // Catch-all handler: send back React's index.html for non-API routes
   app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(path.join(clientBuildPath, "index.html"));
   });
@@ -93,11 +99,6 @@ if (fs.existsSync(clientBuildPath)) {
     `);
   });
 }
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", message: "Server is running" });
-});
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
