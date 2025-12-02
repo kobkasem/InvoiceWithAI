@@ -80,11 +80,7 @@ try {
   // Don't crash - server can still serve health check
 }
 
-// 404 handler for API routes (must be before React static serving)
-app.use("/api/*", (req, res) => {
-  console.log(`❌ API route not found: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ error: "API endpoint not found", path: req.originalUrl });
-});
+// Note: API 404 handler removed - using catch-all at end instead
 
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -125,17 +121,38 @@ if (fs.existsSync(clientBuildPath)) {
   });
 }
 
+// Catch-all 404 handler (must be last, after all routes)
+app.use((req, res) => {
+  console.log(`❌ 404 - Route not found: ${req.method} ${req.originalUrl}`);
+  console.log(`   Request headers:`, JSON.stringify(req.headers, null, 2));
+  res.status(404).json({ 
+    error: "Route not found", 
+    method: req.method,
+    path: req.originalUrl,
+    availableRoutes: [
+      "GET /api/health",
+      "GET /test",
+      "GET /",
+      "POST /api/auth/*",
+      "GET /api/users/*"
+    ]
+  });
+});
+
 // Start server
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`✅ Health check available at: http://0.0.0.0:${PORT}/api/health`);
   console.log(`✅ API routes registered:`);
   console.log(`   - GET  /api/health`);
+  console.log(`   - GET  /test`);
+  console.log(`   - GET  /`);
   console.log(`   - POST /api/auth/*`);
   console.log(`   - GET  /api/users/*`);
   console.log(`   - GET  /api/invoices/*`);
   console.log(`   - GET  /api/prompts/*`);
   console.log(`   - GET  /api/dashboard/*`);
+  console.log(`✅ Server is ready to accept connections`);
 });
 
 // Handle uncaught errors
