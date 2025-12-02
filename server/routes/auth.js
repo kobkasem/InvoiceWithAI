@@ -22,6 +22,10 @@ const JWT_SECRET =
 // Register
 router.post("/register", async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: "Database not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in Railway Variables." });
+    }
+
     const { email, password, full_name } = req.body;
 
     if (!email || !password) {
@@ -77,6 +81,10 @@ router.post("/register", async (req, res) => {
 // Login
 router.post("/login", async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: "Database not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY in Railway Variables." });
+    }
+
     const { email, password } = req.body;
 
     if (!email || !password) {

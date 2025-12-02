@@ -95,23 +95,37 @@ const defaultPromptPayload = JSON.stringify({
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
+let supabase = null;
+
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in environment variables.");
+  console.error("⚠️  Missing Supabase configuration. Please set SUPABASE_URL and SUPABASE_ANON_KEY in environment variables.");
   console.error("Current SUPABASE_URL:", supabaseUrl ? "Set" : "NOT SET");
   console.error("Current SUPABASE_ANON_KEY:", supabaseKey ? "Set" : "NOT SET");
-  throw new Error("Missing required environment variables: SUPABASE_URL and SUPABASE_ANON_KEY must be set in Railway Variables.");
+  console.error("⚠️  Server will start but database features will not work until variables are set.");
+  console.error("⚠️  Add variables in Railway Dashboard → Variables tab, then redeploy.");
+} else {
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log("✅ Supabase client initialized successfully");
+  } catch (error) {
+    console.error("❌ Error creating Supabase client:", error.message);
+    console.error("⚠️  Server will start but database features will not work.");
+  }
 }
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize database and tables
 async function initializeDatabase() {
+  if (!supabase) {
+    console.warn("⚠️  Skipping database initialization - Supabase not configured");
+    return;
+  }
+  
   try {
     // Check if tables exist and create them if needed
     await createTables();
-    console.log("Database initialized successfully");
+    console.log("✅ Database initialized successfully");
   } catch (error) {
-    console.error("Database initialization error:", error);
+    console.error("❌ Database initialization error:", error);
   }
 }
 
@@ -209,7 +223,11 @@ async function createTables() {
   }
 }
 
-// Initialize on module load
-initializeDatabase();
+// Initialize on module load (non-blocking)
+if (supabase) {
+  initializeDatabase();
+} else {
+  console.warn("⚠️  Database module loaded but Supabase not configured");
+}
 
 module.exports = supabase;

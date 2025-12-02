@@ -50,15 +50,44 @@ if (fs.existsSync(clientBuildPath)) {
   console.warn("⚠️  Client build folder not found at:", clientBuildPath);
   console.warn("⚠️  Make sure to run 'npm run build' in client directory");
   
-  // Fallback: serve a simple message
+  // Fallback: serve a helpful error page
   app.get("/", (req, res) => {
     res.send(`
+      <!DOCTYPE html>
       <html>
-        <head><title>Synnex Invoice Extractor</title></head>
+        <head>
+          <title>Synnex Invoice Extractor - Setup Required</title>
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+            h1 { color: #1976d2; }
+            .error { background: #ffebee; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .success { background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; }
+            a { color: #1976d2; }
+          </style>
+        </head>
         <body>
-          <h1>Synnex Invoice Extractor</h1>
-          <p>Frontend build not found. Please check Railway build logs.</p>
-          <p>API is running. Health check: <a href="/api/health">/api/health</a></p>
+          <h1>🚂 Synnex Invoice Extractor</h1>
+          <div class="error">
+            <h2>⚠️ Frontend Build Not Found</h2>
+            <p>The React frontend build folder is missing. This usually means:</p>
+            <ul>
+              <li>The build didn't complete successfully</li>
+              <li>Check Railway build logs for errors</li>
+            </ul>
+          </div>
+          <div class="success">
+            <h2>✅ Server is Running</h2>
+            <p>Your Express server is running correctly!</p>
+            <p>Test API: <a href="/api/health">/api/health</a></p>
+          </div>
+          <h2>🔧 How to Fix</h2>
+          <ol>
+            <li>Go to Railway Dashboard → Deployments</li>
+            <li>Check build logs for errors</li>
+            <li>Verify build command includes: <code>npm run build</code> in client directory</li>
+            <li>Redeploy if needed</li>
+          </ol>
         </body>
       </html>
     `);
